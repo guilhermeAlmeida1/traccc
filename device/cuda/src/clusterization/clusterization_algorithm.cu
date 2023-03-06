@@ -169,9 +169,10 @@ __global__ void ccl_kernel(
         /*
          * Initialize shared variables.
          */
-        start = blockIdx.x * target_cells_per_partition;
-        assert(start < num_cells);
-        end = std::min(num_cells, start + target_cells_per_partition);
+        unsigned int m_start = blockIdx.x * target_cells_per_partition;
+        assert(m_start < num_cells);
+        unsigned int m_end =
+            std::min(num_cells, m_start + target_cells_per_partition);
         outi = 0;
 
         /*
@@ -179,12 +180,12 @@ __global__ void ccl_kernel(
          * the purpose of this is to ensure that we are not operating on any
          * cells that have been claimed by the previous block (if any).
          */
-        while (start != 0 &&
-               cells_device[start - 1].module_link ==
-                   cells_device[start].module_link &&
-               cells_device[start].c.channel1 <=
-                   cells_device[start - 1].c.channel1 + 1) {
-            ++start;
+        while (m_start != 0 &&
+               cells_device[m_start - 1].module_link ==
+                   cells_device[m_start].module_link &&
+               cells_device[m_start].c.channel1 <=
+                   cells_device[m_start - 1].c.channel1 + 1) {
+            ++m_start;
         }
 
         /*
@@ -192,13 +193,15 @@ __global__ void ccl_kernel(
          * current block to ensure that we do not end our partition on a cell
          * that is not a possible boundary!
          */
-        while (end < num_cells &&
-               cells_device[end - 1].module_link ==
-                   cells_device[end].module_link &&
-               cells_device[end].c.channel1 <=
-                   cells_device[end - 1].c.channel1 + 1) {
-            ++end;
+        while (m_end < num_cells &&
+               cells_device[m_end - 1].module_link ==
+                   cells_device[m_end].module_link &&
+               cells_device[m_end].c.channel1 <=
+                   cells_device[m_end - 1].c.channel1 + 1) {
+            ++m_end;
         }
+        start = m_start;
+        end = m_end;
     }
     __syncthreads();
 
