@@ -36,6 +36,16 @@ namespace details {
 
 struct full_chain_algorithm_data {
     ::sycl::queue m_queue;
+    ::sycl::context m_context;
+
+    full_chain_algorithm_data(::sycl::context context) : m_context(context) {
+        m_queue =
+            ::sycl::queue{m_context,
+                          m_context.get_devices()[0],
+                          {::sycl::property::queue::in_order(),
+                           ::sycl::property::image::context_bound(m_context)}};
+                           // Not sure whether the context_bound property has any meaning here...
+    }
 };
 
 }  // namespace details
@@ -43,7 +53,8 @@ struct full_chain_algorithm_data {
 full_chain_algorithm::full_chain_algorithm(
     vecmem::memory_resource& host_mr,
     const unsigned short target_cells_per_partition)
-    : m_data(new details::full_chain_algorithm_data{{::handle_async_error}}),
+    : m_data(new details::full_chain_algorithm_data(
+          ::sycl::context(handle_async_error, ::sycl::property_list{}))),
       m_host_mr(host_mr),
       m_device_mr(std::make_unique<vecmem::sycl::device_memory_resource>(
           &(m_data->m_queue))),
@@ -67,7 +78,8 @@ full_chain_algorithm::full_chain_algorithm(
 }
 
 full_chain_algorithm::full_chain_algorithm(const full_chain_algorithm& parent)
-    : m_data(new details::full_chain_algorithm_data{{::handle_async_error}}),
+    : m_data(new details::full_chain_algorithm_data(
+          ::sycl::context(handle_async_error, ::sycl::property_list{}))),
       m_host_mr(parent.m_host_mr),
       m_device_mr(std::make_unique<vecmem::sycl::device_memory_resource>(
           &(m_data->m_queue))),
@@ -97,10 +109,10 @@ full_chain_algorithm::output_type full_chain_algorithm::operator()(
     // Create device copy of input collections
     cell_collection_types::buffer cells_buffer(cells.size(),
                                                *m_cached_device_mr);
-    (m_copy)(vecmem::get_data(cells), cells_buffer)->wait();
+    (m_copy)(vecmem::get_data(cells), cells_buffer);
     cell_module_collection_types::buffer modules_buffer(modules.size(),
                                                         *m_cached_device_mr);
-    (m_copy)(vecmem::get_data(modules), modules_buffer)->wait();
+    (m_copy)(vecmem::get_data(modules), modules_buffer);
 
     // Execute the algorithms.
     const clusterization_algorithm::output_type spacepoints =

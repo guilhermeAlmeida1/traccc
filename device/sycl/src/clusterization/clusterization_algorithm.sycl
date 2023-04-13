@@ -55,7 +55,12 @@ clusterization_algorithm::clusterization_algorithm(
               .get_info<::sycl::info::device::max_work_group_size>()),
       m_mr(mr),
       m_queue(queue),
-      m_copy(copy) {}
+      m_copy(copy) {
+
+    // This algorithm should only be called using an ordered queue
+    assert(details::get_queue(m_queue)
+               .has_property<::sycl::property::queue::in_order>());
+}
 
 clusterization_algorithm::output_type clusterization_algorithm::operator()(
     const cell_collection_types::const_view& cells,
@@ -68,16 +73,15 @@ clusterization_algorithm::output_type clusterization_algorithm::operator()(
     // Create result object for the CCL kernel with size overestimation
     alt_measurement_collection_types::buffer measurements_buffer(num_cells,
                                                                  m_mr.main);
-    m_copy.setup(measurements_buffer)->wait();
+    m_copy.setup(measurements_buffer);
     alt_measurement_collection_types::view measurements_view(
         measurements_buffer);
 
     // Counter for number of measurements
     vecmem::unique_alloc_ptr<unsigned int> num_measurements_device =
         vecmem::make_unique_alloc<unsigned int>(m_mr.main);
-    details::get_queue(m_queue)
-        .memset(num_measurements_device.get(), 0, sizeof(unsigned int))
-        .wait_and_throw();
+    details::get_queue(m_queue).memset(num_measurements_device.get(), 0,
+                                       sizeof(unsigned int));
 
     const unsigned short max_cells_per_partition =
         (m_target_cells_per_partition * MAX_CELLS_PER_THREAD +
@@ -133,8 +137,7 @@ clusterization_algorithm::output_type clusterization_algorithm::operator()(
                         barry_r, measurements_view,
                         *aux_num_measurements_device, cell_links_view);
                 });
-        })
-        .wait_and_throw();
+        });
 
     // Copy number of measurements to host
     vecmem::unique_alloc_ptr<unsigned int> num_measurements_host =
@@ -146,7 +149,7 @@ clusterization_algorithm::output_type clusterization_algorithm::operator()(
 
     spacepoint_collection_types::buffer spacepoints_buffer(
         *num_measurements_host, m_mr.main);
-    m_copy.setup(spacepoints_buffer)->wait();
+    m_copy.setup(spacepoints_buffer);
     spacepoint_collection_types::view spacepoints_view(spacepoints_buffer);
 
     // For the following kernel, we can now use whatever the desired number of
@@ -165,8 +168,7 @@ clusterization_algorithm::output_type clusterization_algorithm::operator()(
                         item.get_global_linear_id(), measurements_view, modules,
                         *aux_num_measurements_device, spacepoints_view);
                 });
-        })
-        .wait_and_throw();
+        });
 
     return {std::move(spacepoints_buffer), std::move(cell_links)};
 }
