@@ -44,7 +44,8 @@ __global__ void ccl_kernel(
     const index_t target_cells_per_partition,
     alt_measurement_collection_types::view measurements_view,
     unsigned int& measurement_count,
-    vecmem::data::vector_view<unsigned int> cell_links) {
+    vecmem::data::vector_view<unsigned int> cell_links,
+    vecmem::data::vector_view<device::index_t> backup_f) {
     __shared__ unsigned int partition_start, partition_end;
     __shared__ unsigned int outi;
     extern __shared__ index_t shared_v[];
@@ -56,7 +57,7 @@ __global__ void ccl_kernel(
                        modules_view, max_cells_per_partition,
                        target_cells_per_partition, partition_start,
                        partition_end, outi, f, f_next, barry_r,
-                       measurements_view, measurement_count, cell_links);
+                       measurements_view, measurement_count, cell_links, backup_f);
 }
 
 __global__ void form_spacepoints(
@@ -117,13 +118,16 @@ clusterization_algorithm::output_type clusterization_algorithm::operator()(
     vecmem::data::vector_buffer<unsigned int> cell_links(num_cells, m_mr.main);
     m_copy.setup(cell_links);
 
+    vecmem::data::vector_buffer<device::index_t> backup_f(num_cells * 2, m_mr.main);
+    m_copy.setup(backup_f);
+
     // Launch ccl kernel. Each thread will handle a single cell.
     kernels::
         ccl_kernel<<<num_partitions, threads_per_partition,
                      2 * max_cells_per_partition * sizeof(index_t), stream>>>(
             cells, modules, max_cells_per_partition,
             m_target_cells_per_partition, measurements_buffer,
-            *num_measurements_device, cell_links);
+            *num_measurements_device, cell_links, backup_f);
 
     CUDA_ERROR_CHECK(cudaGetLastError());
 

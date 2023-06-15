@@ -52,6 +52,7 @@ static constexpr int MAX_CELLS_PER_THREAD = 12;
 /// @param[out] measurement_count number of measurements
 /// @param[out] cell_links    collection of links to measurements each cell is
 /// put into
+/// @param backup_f array which acts as a replacement of @p f & @p gf in global memory, in case the required size is larger than the shared memory allocation @p max_cells_per_partition
 template <typename barrier_t>
 TRACCC_DEVICE inline void ccl_kernel(
     const index_t threadId, const index_t blckDim, const unsigned int blockId,
@@ -63,7 +64,8 @@ TRACCC_DEVICE inline void ccl_kernel(
     barrier_t& barrier,
     alt_measurement_collection_types::view measurements_view,
     unsigned int& measurement_count,
-    vecmem::data::vector_view<unsigned int> cell_links);
+    vecmem::data::vector_view<unsigned int> cell_links,
+    vecmem::data::vector_view<unsigned int> backup_f);
 
 }  // namespace traccc::device
 

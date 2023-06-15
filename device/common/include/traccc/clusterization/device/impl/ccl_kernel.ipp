@@ -131,7 +131,8 @@ TRACCC_DEVICE inline void ccl_kernel(
     barrier_t& barrier,
     alt_measurement_collection_types::view measurements_view,
     unsigned int& measurement_count,
-    vecmem::data::vector_view<unsigned int> cell_links) {
+    vecmem::data::vector_view<unsigned int> cell_links,
+    vecmem::data::vector_view<index_t> backup_f) {
 
     // Get device copy of input parameters
     const cell_collection_types::const_device cells_device(cells_view);
@@ -187,9 +188,15 @@ TRACCC_DEVICE inline void ccl_kernel(
         partition_end = end;
     }
 
+    if(partition_start >= (blockId + 1) * target_cells_per_partition) {
+        printf("returning early %u\n", blockId);
+        return;
+    }
+
     barrier.blockBarrier();
 
     // Vector of indices of the adjacent cells
+    // this would need to be moved to global memory as well
     index_t adjv[MAX_CELLS_PER_THREAD][8];
     /*
      * The number of adjacent cells for each cell must start at zero, to
@@ -198,6 +205,7 @@ TRACCC_DEVICE inline void ccl_kernel(
      * is set.
      */
     // Number of adjacent cells
+    // this would need to be moved to global memory as well
     unsigned char adjc[MAX_CELLS_PER_THREAD];
 
     // It seems that sycl runs into undefined behaviour when calling
@@ -206,6 +214,14 @@ TRACCC_DEVICE inline void ccl_kernel(
 
     // Get partition for this thread group
     const index_t size = partition_end - partition_start;
+    
+    vecmem::device_vector<index_t> backup_f_dev(backup_f);
+    if(size > max_cells_per_partition) {
+        if(threadId == 0) {printf("here %u\n", blockId);}
+        f = &backup_f_dev[0];
+        gf = &backup_f_dev[num_cells];
+    }
+
     assert(size <= max_cells_per_partition);
 
 #pragma unroll
@@ -221,9 +237,7 @@ TRACCC_DEVICE inline void ccl_kernel(
                                     partition_end, adjc[tst], adjv[tst]);
     }
 
-#pragma unroll
-    for (index_t tst = 0; tst < MAX_CELLS_PER_THREAD; ++tst) {
-        const index_t cid = tst * blckDim + threadId;
+    for (index_t tst = 0, cid; (cid = tst * blckDim + threadId) < size; ++tst) {
         /*
          * At the start, the values of f and gf should be equal to the
          * ID of the cell.
